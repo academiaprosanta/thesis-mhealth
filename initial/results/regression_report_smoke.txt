@@ -1,0 +1,34 @@
+target = y_raw
+6 rows from 3 independent domains
+20 features
+rows per feature = 0.3   (want >= 10)
+
+==================================================================
+NOT ENOUGH DOMAINS. Leave-one-domain-out needs at least 5.
+With 3 domains, holding one out leaves only 2 training rows -- too few to fit anything.
+Every fold will be skipped and every score will be blank.
+
+This is EXPECTED for the smoke test. The smoke test only checks
+that the code runs. Run the full 11-dataset pipeline to get
+scores that mean something.
+==================================================================
+
+mean_baseline   R2=  n/a   RMSE=  n/a   rho=  n/a   tau=  n/a   [0 folds ran, 3 skipped, n=0]
+ridge           R2=  n/a   RMSE=  n/a   rho=  n/a   tau=  n/a   [0 folds ran, 3 skipped, n=0]
+gbm             R2=  n/a   RMSE=  n/a   rho=  n/a   tau=  n/a   [0 folds ran, 3 skipped, n=0]
+
+permutation test SKIPPED -- no valid predictions to test.
+
+NOTE: 6 rows against 20 features. The fit below
+is hopelessly overfit -- read nothing into these coefficients.
+ridge coefficients (standardised, full-data fit, largest first):
+  effective_rank_target        -0.0101
+  log_n_target                 +0.0094
+  fisher_ratio_target          +0.0093
+  n_classes_target             +0.0080
+  balance_entropy_target       +0.0073
+  davies_bouldin_target        -0.0062
+  delta_effective_rank         +0.0043
+  delta_log_n                  -0.0041
+  delta_fisher_ratio           -0.0039
+  delta_davies_bouldin         +0.0028
