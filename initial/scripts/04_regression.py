@@ -27,6 +27,7 @@ import argparse
 import numpy as np
 import pandas as pd
 from scipy.stats import kendalltau, spearmanr
+from sklearn.base import clone
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.linear_model import RidgeCV
 from sklearn.pipeline import make_pipeline
@@ -45,6 +46,12 @@ FEATURES = [
     "auc_source_on_source",
 ]
 
+# A fold is only usable if it leaves enough rows to fit on. Below this the
+# fold is skipped -- and if ALL folds are skipped you get no predictions,
+# which is what happens with only 3 domains.
+MIN_TRAIN_ROWS = 10
+MIN_DOMAINS_FOR_LODO = 5
+
 
 def make_models():
     return {
@@ -57,28 +64,43 @@ def make_models():
 
 
 def lodo_predict(df, feats, target, model):
-    """Leave-one-domain-out. Returns predictions aligned to df's index."""
+    """
+    Leave-one-domain-out.
+
+    Returns (predictions, n_folds_run, n_folds_skipped).
+    A fold is skipped when holding out that domain leaves too few rows to
+    train on -- unavoidable when you have very few domains.
+    """
     domains = sorted(set(df.source) | set(df.target))
     preds = pd.Series(np.nan, index=df.index)
+    ran = skipped = 0
     for d in domains:
         te = df[(df.source == d) | (df.target == d)]
         tr = df[(df.source != d) & (df.target != d)]
-        if len(tr) < 10 or len(te) == 0:
+        if len(tr) < MIN_TRAIN_ROWS or len(te) == 0:
+            skipped += 1
             continue
         if model is None:
             preds.loc[te.index] = tr[target].mean()
         else:
-            from sklearn.base import clone
             m = clone(model).fit(tr[feats], tr[target])
             preds.loc[te.index] = m.predict(te[feats])
-    return preds
+        ran += 1
+    return preds, ran, skipped
 
 
 def score(y, yhat):
+    """Returns NaNs rather than nonsense when there is nothing to score."""
     ok = ~(y.isna() | yhat.isna())
     y, yhat = y[ok], yhat[ok]
-    ss_res = ((y - yhat) ** 2).sum()
-    ss_tot = ((y - y.mean()) ** 2).sum()
+    blank = {"r2": np.nan, "rmse": np.nan, "spearman": np.nan,
+             "kendall": np.nan, "n": int(len(y))}
+    if len(y) < 3:
+        return blank
+    ss_tot = float(((y - y.mean()) ** 2).sum())
+    if ss_tot <= 0:
+        return blank
+    ss_res = float(((y - yhat) ** 2).sum())
     return {
         "r2": 1 - ss_res / ss_tot,
         "rmse": float(np.sqrt(ss_res / len(y))),
@@ -88,6 +110,10 @@ def score(y, yhat):
     }
 
 
+def fmt(v, spec="+.3f"):
+    return "  n/a " if (v is None or (isinstance(v, float) and np.isnan(v))) else format(v, spec)
+
+
 def main(smoke=False, target="y_raw", n_perm=200):
     suffix = "_smoke" if smoke else ""
     df = pd.read_csv(RESULT_DIR / f"design_matrix{suffix}.csv")
@@ -95,6 +121,7 @@ def main(smoke=False, target="y_raw", n_perm=200):
 
     feats = [f for f in FEATURES if f in df.columns]
     df = df.dropna(subset=feats).reset_index(drop=True)
+    n_dom = df.source.nunique()
 
     lines = []
     def say(s=""):
@@ -102,40 +129,71 @@ def main(smoke=False, target="y_raw", n_perm=200):
         lines.append(s)
 
     say(f"target = {target}")
-    say(f"{len(df)} rows from {df.source.nunique()} independent domains")
+    say(f"{len(df)} rows from {n_dom} independent domains")
     say(f"{len(feats)} features")
     say(f"rows per feature = {len(df)/len(feats):.1f}   (want >= 10)")
     say()
 
+    # ---- can we even do leave-one-domain-out? ----------------------------
+    if n_dom < MIN_DOMAINS_FOR_LODO:
+        say("=" * 66)
+        say(f"NOT ENOUGH DOMAINS. Leave-one-domain-out needs at least "
+            f"{MIN_DOMAINS_FOR_LODO}.")
+        say(f"With {n_dom} domains, holding one out leaves only "
+            f"{(n_dom-1)*(n_dom-2)} training rows -- too few to fit anything.")
+        say("Every fold will be skipped and every score will be blank.")
+        say()
+        say("This is EXPECTED for the smoke test. The smoke test only checks")
+        say("that the code runs. Run the full 11-dataset pipeline to get")
+        say("scores that mean something.")
+        say("=" * 66)
+        say()
+
     results = {}
     for name, model in make_models().items():
-        preds = lodo_predict(df, feats, target, model)
+        preds, ran, skipped = lodo_predict(df, feats, target, model)
         results[name] = score(df[target], preds)
         s = results[name]
-        say(f"{name:15s} R2={s['r2']:+.3f}  RMSE={s['rmse']:.4f}  "
-            f"rho={s['spearman']:+.3f}  tau={s['kendall']:+.3f}")
+        say(f"{name:15s} R2={fmt(s['r2'])}  RMSE={fmt(s['rmse'], '.4f')}  "
+            f"rho={fmt(s['spearman'])}  tau={fmt(s['kendall'])}  "
+            f"[{ran} folds ran, {skipped} skipped, n={s['n']}]")
         if name == "ridge":
             df["pred_ridge"] = preds
 
-    # ---- permutation test on the best real model -------------------------
-    say()
-    say(f"permutation test on ridge, {n_perm} shuffles")
-    rng = np.random.default_rng(SEED)
-    null = []
-    ridge = make_models()["ridge"]
-    for _ in range(n_perm):
-        shuffled = df.copy()
-        shuffled[target] = rng.permutation(shuffled[target].values)
-        null.append(score(shuffled[target], lodo_predict(shuffled, feats, target, ridge))["r2"])
-    null = np.array(null)
     real = results["ridge"]["r2"]
-    pval = float((null >= real).mean())
-    say(f"  null R2: mean {null.mean():+.3f}, 95th pct {np.percentile(null,95):+.3f}")
-    say(f"  real R2: {real:+.3f}")
-    say(f"  p = {pval:.3f}   {'SIGNAL' if pval < 0.05 else 'NOT DISTINGUISHABLE FROM NOISE'}")
 
-    # ---- which features did ridge lean on? -------------------------------
+    # ---- permutation test -------------------------------------------------
     say()
+    if np.isnan(real):
+        say("permutation test SKIPPED -- no valid predictions to test.")
+    else:
+        say(f"permutation test on ridge, {n_perm} shuffles")
+        rng = np.random.default_rng(SEED)
+        ridge = make_models()["ridge"]
+        null = []
+        for _ in range(n_perm):
+            sh = df.copy()
+            sh[target] = rng.permutation(sh[target].values)
+            p, _, _ = lodo_predict(sh, feats, target, ridge)
+            null.append(score(sh[target], p)["r2"])
+        null = np.array(null, dtype=float)
+        valid = null[~np.isnan(null)]
+        if len(valid) < n_perm // 2:
+            say("  too many failed shuffles -- result unreliable")
+        else:
+            pval = float((valid >= real).mean())
+            say(f"  null R2: mean {valid.mean():+.3f}, "
+                f"95th pct {np.percentile(valid, 95):+.3f}  "
+                f"({len(valid)}/{n_perm} valid)")
+            say(f"  real R2: {real:+.3f}")
+            verdict = "SIGNAL" if pval < 0.05 else "NOT DISTINGUISHABLE FROM NOISE"
+            say(f"  p = {pval:.3f}   {verdict}")
+
+    # ---- which features did ridge lean on? --------------------------------
+    say()
+    if len(df) < 2 * len(feats):
+        say(f"NOTE: {len(df)} rows against {len(feats)} features. The fit below")
+        say("is hopelessly overfit -- read nothing into these coefficients.")
     fitted = make_models()["ridge"].fit(df[feats], df[target])
     coefs = fitted[-1].coef_
     order = np.argsort(-np.abs(coefs))
