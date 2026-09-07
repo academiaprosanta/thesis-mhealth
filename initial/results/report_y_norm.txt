@@ -1,0 +1,25 @@
+target = y_norm
+110 rows from 11 independent domains
+20 features
+rows per feature = 5.5   (want >= 10)
+
+mean_baseline   R2=-0.092  RMSE=0.0280  rho=-0.430  tau=-0.320  [11 folds ran, 0 skipped, n=110]
+ridge           R2=+0.272  RMSE=0.0229  rho=+0.582  tau=+0.420  [11 folds ran, 0 skipped, n=110]
+gbm             R2=+0.072  RMSE=0.0258  rho=+0.388  tau=+0.275  [11 folds ran, 0 skipped, n=110]
+
+permutation test on ridge, 200 shuffles
+  null R2: mean -0.060, 95th pct -0.005  (200/200 valid)
+  real R2: +0.272
+  p = 0.000   SIGNAL
+
+ridge coefficients (standardised, full-data fit, largest first):
+  n_classes_target             +0.0120
+  davies_bouldin_target        -0.0111
+  balance_entropy_target       -0.0096
+  effective_rank_target        +0.0085
+  log_n_target                 -0.0081
+  delta_davies_bouldin         +0.0069
+  auc_source_on_source         +0.0058
+  fisher_ratio_source          +0.0052
+  n_classes_source             -0.0050
+  delta_effective_rank         -0.0044
