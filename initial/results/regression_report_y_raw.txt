@@ -1,0 +1,47 @@
+target = y_raw   (MEASURED quantity; predictions go in pred_*)
+110 rows from 11 independent domains
+20 features
+rows per feature = 5.5   (want >= 10)
+
+mean_baseline   R2=-0.153  RMSE=0.1000  rho=-0.489  tau=-0.384  [11 folds ran, 0 skipped, n=110]
+ridge           R2=+0.466  RMSE=0.0681  rho=+0.803  tau=+0.605  [11 folds ran, 0 skipped, n=110]
+gbm             R2=-0.017  RMSE=0.0940  rho=+0.584  tau=+0.379  [11 folds ran, 0 skipped, n=110]
+
+permutation test on ridge, 200 shuffles
+  null R2: mean -0.062, 95th pct +0.006  (200/200 valid)
+  real R2: +0.466
+  p = 0.000   SIGNAL
+
+SOURCE SELECTION (ridge, evaluated within each target column)
+  mean within-target tau : +0.055
+  mean top-1 regret      : 0.0223
+  random-pick regret     : 0.0215
+  perfect picks          : 0/11
+
+  target               tau   regret  best             picked          
+  bloodmnist        +0.156   0.0105  tissuemnist      dermamnist      
+  breastmnist       -0.111   0.0401  tissuemnist      bloodmnist      
+  dermamnist        +0.422   0.0023  octmnist         retinamnist     
+  octmnist          -0.022   0.0026  pathmnist        bloodmnist      
+  organamnist       +0.022   0.0105  organcmnist      pathmnist       
+  organcmnist       +0.022   0.0145  organsmnist      retinamnist     
+  organsmnist       -0.289   0.0318  organcmnist      retinamnist     
+  pathmnist         +0.289   0.0070  bloodmnist       organamnist     
+  pneumoniamnist    +0.244   0.0322  organamnist      retinamnist     
+  retinamnist       -0.156   0.0751  octmnist         tissuemnist     
+  tissuemnist       +0.022   0.0193  octmnist         organamnist     
+
+Also: these features are strongly correlated with each other, so
+individual signs can flip. Use univariate correlations to decide
+which metric matters, not this list.
+ridge coefficients (standardised, full-data fit, largest first):
+  effective_rank_target        +0.0426
+  davies_bouldin_target        -0.0424
+  n_classes_target             -0.0258
+  silhouette_target            -0.0224
+  delta_davies_bouldin         +0.0220
+  delta_effective_rank         -0.0208
+  fisher_ratio_target          +0.0167
+  log_n_target                 +0.0137
+  effective_rank_source        +0.0117
+  delta_silhouette             +0.0103
