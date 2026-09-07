@@ -3,6 +3,19 @@ STEP 4  (laptop, ~30 seconds)
 
 Fit the predictor and evaluate it honestly.
 
+WHAT IS MEASURED vs WHAT IS PREDICTED
+-------------------------------------
+  y_raw / y_norm / y_gap   MEASURED. These came out of actually running models
+                           on GPUs in script 02. y_raw is literally a copy of
+                           transfer_auc; y_norm and y_gap are rearrangements
+                           of the same measured numbers.
+
+  pred_ridge / pred_gbm    PREDICTED. Produced from the 20 geometry features
+                           alone, by a model that never saw either domain in
+                           this pair.
+
+The whole point is comparing the second group against the first.
+
 Two things here are non-negotiable:
 
 LEAVE-ONE-DOMAIN-OUT. If you split the rows randomly, pair (A->B) lands in
@@ -14,9 +27,11 @@ PERMUTATION TEST. Shuffle the outcomes, refit, record the score. Do it 200
 times. Your real score must sit outside that distribution. With ~100 rows,
 respectable-looking R2 values arise from pure noise all the time.
 
-Output: results/regression_report.txt, results/lodo_predictions.csv
+Outputs (one set per target, no longer overwriting each other):
+  results/regression_report_<target>.txt
+  results/lodo_predictions_<target>.csv
 
-Run:  python scripts/04_regression.py [--smoke] [--target y_norm]
+Run:  python scripts/04_regression.py --target y_norm
 """
 
 # --- make "import src..." work no matter where you run this from ---
@@ -45,6 +60,10 @@ FEATURES = [
     "n_classes_source", "n_classes_target",
     "auc_source_on_source",
 ]
+
+# For y_gap, SMALLER is better (less performance lost). The other two are
+# "bigger is better". This matters for the source-selection metrics below.
+HIGHER_IS_BETTER = {"y_raw": True, "y_norm": True, "y_gap": False}
 
 # A fold is only usable if it leaves enough rows to fit on. Below this the
 # fold is skipped -- and if ALL folds are skipped you get no predictions,
@@ -110,6 +129,41 @@ def score(y, yhat):
     }
 
 
+def source_selection(df, target, pred_col):
+    """
+    The metric that matches how the model would actually be used:
+    "given THIS target, which of the candidate sources should I pick?"
+
+    Pooled correlation across all 110 pairs answers a different, easier
+    question. Here we evaluate WITHIN each target column separately.
+
+      within_tau  : rank correlation among candidate sources, per target
+      regret      : how much you lose by taking the model's top pick instead
+                    of the true best source
+      random_regret: what you would lose picking a source at random
+    """
+    higher = HIGHER_IS_BETTER[target]
+    rows = []
+    for tgt, g in df.groupby("target"):
+        g = g.dropna(subset=[target, pred_col])
+        if len(g) < 3:
+            continue
+        best = g[target].max() if higher else g[target].min()
+        idx = g[pred_col].idxmax() if higher else g[pred_col].idxmin()
+        picked = g.loc[idx, target]
+        rows.append({
+            "target": tgt,
+            "n_sources": len(g),
+            "within_tau": float(kendalltau(g[target], g[pred_col]).statistic),
+            "best_source": g.loc[g[target].idxmax() if higher
+                                 else g[target].idxmin(), "source"],
+            "picked_source": g.loc[idx, "source"],
+            "regret": float(abs(best - picked)),
+            "random_regret": float((best - g[target]).abs().mean()),
+        })
+    return pd.DataFrame(rows)
+
+
 def fmt(v, spec="+.3f"):
     return "  n/a " if (v is None or (isinstance(v, float) and np.isnan(v))) else format(v, spec)
 
@@ -128,7 +182,7 @@ def main(smoke=False, target="y_raw", n_perm=200):
         print(s)
         lines.append(s)
 
-    say(f"target = {target}")
+    say(f"target = {target}   (MEASURED quantity; predictions go in pred_*)")
     say(f"{len(df)} rows from {n_dom} independent domains")
     say(f"{len(feats)} features")
     say(f"rows per feature = {len(df)/len(feats):.1f}   (want >= 10)")
@@ -157,8 +211,8 @@ def main(smoke=False, target="y_raw", n_perm=200):
         say(f"{name:15s} R2={fmt(s['r2'])}  RMSE={fmt(s['rmse'], '.4f')}  "
             f"rho={fmt(s['spearman'])}  tau={fmt(s['kendall'])}  "
             f"[{ran} folds ran, {skipped} skipped, n={s['n']}]")
-        if name == "ridge":
-            df["pred_ridge"] = preds
+        if name in ("ridge", "gbm"):
+            df[f"pred_{name}"] = preds
 
     real = results["ridge"]["r2"]
 
@@ -189,11 +243,34 @@ def main(smoke=False, target="y_raw", n_perm=200):
             verdict = "SIGNAL" if pval < 0.05 else "NOT DISTINGUISHABLE FROM NOISE"
             say(f"  p = {pval:.3f}   {verdict}")
 
+    # ---- source selection: the deployment-relevant metric -----------------
+    if "pred_ridge" in df.columns and not df.pred_ridge.isna().all():
+        sel = source_selection(df, target, "pred_ridge")
+        if len(sel):
+            say()
+            say("SOURCE SELECTION (ridge, evaluated within each target column)")
+            say(f"  mean within-target tau : {sel.within_tau.mean():+.3f}")
+            say(f"  mean top-1 regret      : {sel.regret.mean():.4f}")
+            say(f"  random-pick regret     : {sel.random_regret.mean():.4f}")
+            say(f"  perfect picks          : {int((sel.regret < 1e-9).sum())}/{len(sel)}")
+            say()
+            say(f"  {'target':16s} {'tau':>7s} {'regret':>8s}  "
+                f"{'best':16s} {'picked':16s}")
+            for _, r in sel.iterrows():
+                flag = "  <-- correct" if r.regret < 1e-9 else ""
+                say(f"  {r.target:16s} {r.within_tau:+7.3f} {r.regret:8.4f}  "
+                    f"{r.best_source:16s} {r.picked_source:16s}{flag}")
+            sel.to_csv(RESULT_DIR / f"source_selection_{target}{suffix}.csv",
+                       index=False)
+
     # ---- which features did ridge lean on? --------------------------------
     say()
     if len(df) < 2 * len(feats):
         say(f"NOTE: {len(df)} rows against {len(feats)} features. The fit below")
         say("is hopelessly overfit -- read nothing into these coefficients.")
+    say("Also: these features are strongly correlated with each other, so")
+    say("individual signs can flip. Use univariate correlations to decide")
+    say("which metric matters, not this list.")
     fitted = make_models()["ridge"].fit(df[feats], df[target])
     coefs = fitted[-1].coef_
     order = np.argsort(-np.abs(coefs))
@@ -201,10 +278,14 @@ def main(smoke=False, target="y_raw", n_perm=200):
     for i in order[:10]:
         say(f"  {feats[i]:28s} {coefs[i]:+.4f}")
 
-    (RESULT_DIR / f"regression_report{suffix}.txt").write_text("\n".join(lines))
-    df.to_csv(RESULT_DIR / f"lodo_predictions{suffix}.csv", index=False)
+    # ---- write, with the target in the filename so runs do not clobber ----
+    rpt = RESULT_DIR / f"regression_report_{target}{suffix}.txt"
+    csv = RESULT_DIR / f"lodo_predictions_{target}{suffix}.csv"
+    rpt.write_text("\n".join(lines))
+    df.to_csv(csv, index=False)
     say()
-    say(f"wrote results/regression_report{suffix}.txt")
+    say(f"wrote {rpt.name}")
+    say(f"wrote {csv.name}   (compare column '{target}' against 'pred_ridge')")
 
 
 if __name__ == "__main__":
