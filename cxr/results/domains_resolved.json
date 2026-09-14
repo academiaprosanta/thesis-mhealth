@@ -1,0 +1,200 @@
+[
+ {
+  "name": "kermany_peds",
+  "mode": "globs",
+  "normal_dirs": [
+   "/kaggle/input/datasets/paultimothymooney/chest-xray-pneumonia/chest_xray/test/NORMAL",
+   "/kaggle/input/datasets/paultimothymooney/chest-xray-pneumonia/chest_xray/train/NORMAL"
+  ],
+  "abnormal_dirs": [
+   "/kaggle/input/datasets/paultimothymooney/chest-xray-pneumonia/chest_xray/test/PNEUMONIA",
+   "/kaggle/input/datasets/paultimothymooney/chest-xray-pneumonia/chest_xray/train/PNEUMONIA"
+  ],
+  "meta": {
+   "country": "China",
+   "city": "Guangzhou",
+   "population": "paediatric",
+   "finding": "pneumonia",
+   "source": "Kermany 2018"
+  },
+  "kaggle_dir": "datasets"
+ },
+ {
+  "name": "covid_viral",
+  "mode": "globs",
+  "normal_dirs": [
+   "/kaggle/input/datasets/tawsifurrahman/covid19-radiography-database/COVID-19_Radiography_Dataset/Normal/images"
+  ],
+  "abnormal_dirs": [
+   "/kaggle/input/datasets/tawsifurrahman/covid19-radiography-database/COVID-19_Radiography_Dataset/Viral Pneumonia/images"
+  ],
+  "partition": [
+   0,
+   3
+  ],
+  "meta": {
+   "country": "Qatar/Bangladesh",
+   "population": "adult",
+   "finding": "viral pneumonia",
+   "source": "COVID-19 Radiography DB"
+  },
+  "kaggle_dir": "datasets"
+ },
+ {
+  "name": "covid_opacity",
+  "mode": "globs",
+  "normal_dirs": [
+   "/kaggle/input/datasets/tawsifurrahman/covid19-radiography-database/COVID-19_Radiography_Dataset/Normal/images"
+  ],
+  "abnormal_dirs": [
+   "/kaggle/input/datasets/tawsifurrahman/covid19-radiography-database/COVID-19_Radiography_Dataset/Lung_Opacity/images"
+  ],
+  "partition": [
+   1,
+   3
+  ],
+  "meta": {
+   "country": "Qatar/Bangladesh",
+   "population": "adult",
+   "finding": "lung opacity",
+   "source": "COVID-19 Radiography DB"
+  },
+  "kaggle_dir": "datasets"
+ },
+ {
+  "name": "covid_covid",
+  "mode": "globs",
+  "normal_dirs": [
+   "/kaggle/input/datasets/tawsifurrahman/covid19-radiography-database/COVID-19_Radiography_Dataset/Normal/images"
+  ],
+  "abnormal_dirs": [
+   "/kaggle/input/datasets/tawsifurrahman/covid19-radiography-database/COVID-19_Radiography_Dataset/COVID/images"
+  ],
+  "partition": [
+   2,
+   3
+  ],
+  "meta": {
+   "country": "Qatar/Bangladesh",
+   "population": "adult",
+   "finding": "covid-19",
+   "source": "COVID-19 Radiography DB"
+  },
+  "kaggle_dir": "datasets"
+ },
+ {
+  "name": "tb_qatar",
+  "mode": "globs",
+  "normal_dirs": [
+   "/kaggle/input/datasets/tawsifurrahman/tuberculosis-tb-chest-xray-dataset/TB_Chest_Radiography_Database/Normal"
+  ],
+  "abnormal_dirs": [
+   "/kaggle/input/datasets/tawsifurrahman/tuberculosis-tb-chest-xray-dataset/TB_Chest_Radiography_Database/Tuberculosis"
+  ],
+  "meta": {
+   "country": "Qatar/Bangladesh",
+   "population": "adult",
+   "finding": "tuberculosis",
+   "source": "TB Chest Radiography DB"
+  },
+  "kaggle_dir": "datasets"
+ },
+ {
+  "name": "shenzhen",
+  "mode": "filename",
+  "dirs": [
+   "/kaggle/input/datasets/kmader/pulmonary-chest-xray-abnormalities/ChinaSet_AllFiles/ChinaSet_AllFiles/CXR_png"
+  ],
+  "suffix_map": {
+   "0": 0,
+   "1": 1
+  },
+  "meta": {
+   "population": "adult",
+   "finding": "tuberculosis",
+   "source": "NLM TB set",
+   "country": "China",
+   "city": "Shenzhen"
+  },
+  "kaggle_dir": "datasets"
+ },
+ {
+  "name": "nih_pa",
+  "mode": "csv",
+  "csv": "/kaggle/input/datasets/nih-chest-xrays/sample/sample_labels.csv",
+  "image_col": "Image Index",
+  "label_col": "Finding Labels",
+  "normal_values": [
+   "No Finding"
+  ],
+  "filter": {
+   "View Position": [
+    "PA"
+   ]
+  },
+  "image_dirs": [
+   "/kaggle/input/datasets/nih-chest-xrays/sample/sample/images",
+   "/kaggle/input/datasets/nih-chest-xrays/sample/sample/sample/images",
+   "/kaggle/input/datasets/tawsifurrahman/covid19-radiography-database/COVID-19_Radiography_Dataset/Normal/images",
+   "/kaggle/input/datasets/tawsifurrahman/covid19-radiography-database/COVID-19_Radiography_Dataset/Lung_Opacity/images",
+   "/kaggle/input/datasets/tawsifurrahman/covid19-radiography-database/COVID-19_Radiography_Dataset/Viral Pneumonia/images",
+   "/kaggle/input/datasets/tawsifurrahman/covid19-radiography-database/COVID-19_Radiography_Dataset/COVID/images"
+  ],
+  "meta": {
+   "country": "USA",
+   "population": "adult",
+   "view": "PA",
+   "finding": "any of 14",
+   "source": "NIH ChestX-ray14"
+  },
+  "kaggle_dir": "datasets"
+ },
+ {
+  "name": "nih_ap",
+  "mode": "csv",
+  "csv": "/kaggle/input/datasets/nih-chest-xrays/sample/sample_labels.csv",
+  "image_col": "Image Index",
+  "label_col": "Finding Labels",
+  "normal_values": [
+   "No Finding"
+  ],
+  "filter": {
+   "View Position": [
+    "AP"
+   ]
+  },
+  "image_dirs": [
+   "/kaggle/input/datasets/nih-chest-xrays/sample/sample/images",
+   "/kaggle/input/datasets/nih-chest-xrays/sample/sample/sample/images",
+   "/kaggle/input/datasets/tawsifurrahman/covid19-radiography-database/COVID-19_Radiography_Dataset/Normal/images",
+   "/kaggle/input/datasets/tawsifurrahman/covid19-radiography-database/COVID-19_Radiography_Dataset/Lung_Opacity/images",
+   "/kaggle/input/datasets/tawsifurrahman/covid19-radiography-database/COVID-19_Radiography_Dataset/Viral Pneumonia/images",
+   "/kaggle/input/datasets/tawsifurrahman/covid19-radiography-database/COVID-19_Radiography_Dataset/COVID/images"
+  ],
+  "meta": {
+   "country": "USA",
+   "population": "adult",
+   "view": "AP",
+   "finding": "any of 14",
+   "source": "NIH ChestX-ray14"
+  },
+  "kaggle_dir": "datasets"
+ },
+ {
+  "name": "indiana",
+  "mode": "indiana",
+  "projections": "/kaggle/input/datasets/raddar/chest-xrays-indiana-university/indiana_projections.csv",
+  "reports": "/kaggle/input/datasets/raddar/chest-xrays-indiana-university/indiana_reports.csv",
+  "image_dirs": [
+   "/kaggle/input/datasets/raddar/chest-xrays-indiana-university/images/images_normalized"
+  ],
+  "meta": {
+   "country": "USA",
+   "state": "Indiana",
+   "population": "adult",
+   "finding": "any",
+   "source": "Open-i / Indiana"
+  },
+  "kaggle_dir": "datasets"
+ }
+]
