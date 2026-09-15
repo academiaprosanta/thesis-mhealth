@@ -63,6 +63,27 @@ def prediction_behaviour(P):
 
 
 # --------------------------------------------------------------- family B
+def _stratified_idx(y, n, seed=SEED):
+    """
+    Subsample to n points while KEEPING BOTH CLASSES.
+
+    A plain random subsample can drop a tiny minority class entirely, which
+    makes silhouette_score raise "Number of labels is 1". That killed a
+    four-hour run once. Not again.
+    """
+    rng = np.random.default_rng(seed)
+    classes, counts = np.unique(y, return_counts=True)
+    if len(classes) < 2 or len(y) <= n:
+        return np.arange(len(y))
+    keep = []
+    for c, cnt in zip(classes, counts):
+        idx_c = np.flatnonzero(y == c)
+        take = max(2, int(round(n * cnt / len(y))))   # never fewer than 2
+        take = min(take, len(idx_c))
+        keep.append(rng.choice(idx_c, take, replace=False))
+    return np.concatenate(keep)
+
+
 def pseudo_label_geometry(X, P, seed=SEED):
     """
     Take the source model's PREDICTIONS as if they were labels, then measure
@@ -70,20 +91,37 @@ def pseudo_label_geometry(X, P, seed=SEED):
 
     Asks: does the source model carve this target into two clean groups?
     Uses no ground truth.
+
+    If the model predicted (almost) one class for everything, the geometry is
+    undefined -- we record that as pseudo_collapsed=1 and NaN the rest. That
+    collapse is itself a strong signal that transfer will go badly.
     """
+    blank = dict(pseudo_silhouette=np.nan, pseudo_davies_bouldin=np.nan,
+                 pseudo_fisher=np.nan, pseudo_collapsed=1.0,
+                 pseudo_minority_rate=0.0)
     yhat = P.argmax(axis=1)
-    if len(np.unique(yhat)) < 2:
-        # model predicted one class for everything -- itself informative
-        return dict(pseudo_silhouette=np.nan, pseudo_davies_bouldin=np.nan,
-                    pseudo_fisher=np.nan, pseudo_collapsed=1.0)
-    n = min(GEOM_SAMPLE, len(X))
-    idx = np.random.default_rng(seed).choice(len(X), n, replace=False)
+    classes, counts = np.unique(yhat, return_counts=True)
+    if len(classes) < 2:
+        return blank
+
+    minority = float(counts.min() / counts.sum())
+    # fewer than 10 points in a class makes every cluster metric meaningless
+    if counts.min() < 10:
+        blank["pseudo_minority_rate"] = minority
+        return blank
+
+    idx = _stratified_idx(yhat, min(GEOM_SAMPLE, len(X)), seed)
     Xs, ys = X[idx], yhat[idx]
+    if len(np.unique(ys)) < 2:          # belt and braces
+        blank["pseudo_minority_rate"] = minority
+        return blank
+
     return dict(
         pseudo_silhouette=float(silhouette_score(Xs, ys, random_state=seed)),
         pseudo_davies_bouldin=float(davies_bouldin_score(Xs, ys)),
         pseudo_fisher=fisher_ratio(Xs, ys),
         pseudo_collapsed=0.0,
+        pseudo_minority_rate=minority,
     )
 
 
@@ -158,10 +196,14 @@ def _frechet(A, B, dim=64, seed=SEED):
     a, b = p.transform(A), p.transform(B)
     mu = ((a.mean(0) - b.mean(0)) ** 2).sum()
     Ca, Cb = np.cov(a, rowvar=False), np.cov(b, rowvar=False)
-    cov = sqrtm(Ca @ Cb)
+    try:
+        cov = sqrtm(Ca @ Cb)
+    except Exception:
+        return np.nan
     if np.iscomplexobj(cov):
         cov = cov.real
-    return float(mu + np.trace(Ca + Cb - 2 * cov))
+    val = float(mu + np.trace(Ca + Cb - 2 * cov))
+    return val if np.isfinite(val) else np.nan
 
 
 def _a_distance(A, B, seed=SEED):
@@ -172,6 +214,8 @@ def _a_distance(A, B, seed=SEED):
     A, B = _sub(A, MMD_SAMPLE, seed), _sub(B, MMD_SAMPLE, seed + 1)
     X = np.vstack([A, B])
     y = np.r_[np.zeros(len(A)), np.ones(len(B))]
+    if len(A) < 10 or len(B) < 10:
+        return np.nan
     clf = LogisticRegression(max_iter=1000, random_state=seed)
     acc = cross_val_score(clf, X, y, cv=3, scoring="accuracy").mean()
     err = 1 - acc
@@ -195,6 +239,31 @@ def domain_distance(Xs, Xt, seed=SEED):
 
 
 # --------------------------------------------------------------- assemble
+def _safe(fn, keys, prefix="", **kw):
+    """
+    Run one feature family. If it raises, fill its columns with NaN and carry
+    on -- a single bad pair must never abort the whole transfer matrix.
+    The imputer in 04_regression.py handles the NaNs downstream.
+    """
+    try:
+        out = fn(**kw)
+    except Exception as e:
+        print(f"    [warn] {fn.__name__} failed: {type(e).__name__}: {str(e)[:110]}")
+        out = {k: np.nan for k in keys}
+    return {f"{prefix}{k}": v for k, v in out.items()}
+
+
+_BEHAVIOUR_KEYS = ["pred_entropy_mean", "pred_entropy_std", "pred_conf_mean",
+                   "pred_conf_std", "pred_frac_confident", "pred_positive_rate",
+                   "pred_prob_mean", "pred_prob_std"]
+_PSEUDO_KEYS = ["pseudo_silhouette", "pseudo_davies_bouldin", "pseudo_fisher",
+                "pseudo_collapsed", "pseudo_minority_rate"]
+_CLUSTER_KEYS = ["kmeans_silhouette", "kmeans_balance", "kmeans_inertia_ratio"]
+_SPECTRAL_KEYS = ["eff_rank", "spec_decay", "feat_norm_mean", "feat_norm_std"]
+_DISTANCE_KEYS = ["mmd", "coral", "frechet", "a_distance", "mean_cosine",
+                  "mean_shift", "norm_ratio"]
+
+
 def unsupervised_pair_features(Xs, Xt, Pt, seed=SEED):
     """
     Every label-free feature for one (source, target) pair.
@@ -203,18 +272,19 @@ def unsupervised_pair_features(Xs, Xt, Pt, seed=SEED):
     Xt : target images through the source backbone   (N_t, 512)
     Pt : source classifier applied to Xt             (N_t, 2)
 
-    No target labels anywhere.
+    No target labels anywhere. Any family that fails yields NaN rather than
+    raising.
     """
     out = {}
-    out.update(prediction_behaviour(Pt))
-    out.update(pseudo_label_geometry(Xt, Pt, seed))
-    out.update({f"tgt_{k}": v for k, v in cluster_structure(Xt, seed).items()})
-    out.update({f"tgt_{k}": v for k, v in spectral_shape(Xt, seed).items()})
-    out.update({f"src_{k}": v for k, v in spectral_shape(Xs, seed).items()})
-    out.update(domain_distance(Xs, Xt, seed))
+    out.update(_safe(prediction_behaviour, _BEHAVIOUR_KEYS, P=Pt))
+    out.update(_safe(pseudo_label_geometry, _PSEUDO_KEYS, X=Xt, P=Pt, seed=seed))
+    out.update(_safe(cluster_structure, _CLUSTER_KEYS, prefix="tgt_", X=Xt, seed=seed))
+    out.update(_safe(spectral_shape, _SPECTRAL_KEYS, prefix="tgt_", X=Xt, seed=seed))
+    out.update(_safe(spectral_shape, _SPECTRAL_KEYS, prefix="src_", X=Xs, seed=seed))
+    out.update(_safe(domain_distance, _DISTANCE_KEYS, Xs=Xs, Xt=Xt, seed=seed))
     # signed spectral differences -- direction matters (report Q2 vs Q3)
     for k in ("eff_rank", "spec_decay", "feat_norm_mean"):
-        out[f"delta_{k}"] = out[f"src_{k}"] - out[f"tgt_{k}"]
+        out[f"delta_{k}"] = out.get(f"src_{k}", np.nan) - out.get(f"tgt_{k}", np.nan)
     return out
 
 
@@ -224,6 +294,7 @@ UNSUP_FEATURES = [
     "pred_frac_confident", "pred_positive_rate", "pred_prob_mean", "pred_prob_std",
     # B: pseudo-label geometry
     "pseudo_silhouette", "pseudo_davies_bouldin", "pseudo_fisher", "pseudo_collapsed",
+    "pseudo_minority_rate",
     # C: unsupervised clustering
     "tgt_kmeans_silhouette", "tgt_kmeans_balance", "tgt_kmeans_inertia_ratio",
     # D: spectral shape
