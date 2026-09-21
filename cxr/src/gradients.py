@@ -85,7 +85,7 @@ def source_basis(model, loader, layer="layer4.1.conv2", r=32, device="cuda",
     of the SOURCE gradient, using the source's own labels -- which you have,
     because you trained on that data. No target labels involved.
     """
-    from subspace import top_right_subspace
+    from .subspace import top_right_subspace
     G = layer_gradient(model, loader, layer, "oracle", device,
                        max_batches=20, desc=desc)
     return top_right_subspace(G, r), G

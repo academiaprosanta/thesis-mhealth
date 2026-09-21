@@ -37,6 +37,20 @@ def main(rank=32, layer="layer4.1.conv2", max_batches=20, limit=None,
     device = "cuda" if torch.cuda.is_available() else "cpu"
     names = domain_names()[:limit] if limit else domain_names()
 
+    # ---- pre-flight: are the trained models actually here? ---------------
+    have = sorted(p.stem for p in CKPT_DIR.glob("*.pt"))
+    missing = [n for n in names if n not in have]
+    print(f"checkpoints found in {CKPT_DIR}: {len(have)}")
+    if not have:
+        sys.exit(
+            "\nNO CHECKPOINTS FOUND. This is a fresh Kaggle container -- the models\n"
+            "from your earlier run are gone unless you attach them.\n\n"
+            "Fix: + Add Data -> Your Work -> Notebook Output -> your completed run,\n"
+            "then copy the .pt files into /kaggle/working/checkpoints before running\n"
+            "this script. You need one per domain.\n")
+    if missing:
+        print(f"WARNING: no checkpoint for {missing} -- those sources will be skipped")
+
     tm_path = RESULT_DIR / "transfer_matrix.csv"
     tm = pd.read_csv(tm_path)
     tm.to_csv(RESULT_DIR / "transfer_matrix_backup.csv", index=False)
@@ -53,7 +67,7 @@ def main(rank=32, layer="layer4.1.conv2", max_batches=20, limit=None,
     for source in names:
         ckpt = CKPT_DIR / f"{source}.pt"
         if not ckpt.exists():
-            print(f"!! no checkpoint for {source}, skipping")
+            print(f"!! no checkpoint for {source} -- skipping this source")
             continue
         model = build_model(pretrained=False)
         model.load_state_dict(torch.load(ckpt, map_location="cpu"))
@@ -111,6 +125,9 @@ def main(rank=32, layer="layer4.1.conv2", max_batches=20, limit=None,
 
     # ---- merge into the transfer matrix ----------------------------------
     sub = pd.DataFrame(rows)
+    if sub.empty or "source" not in sub.columns:
+        sys.exit("\nNo subspace rows were computed, so there is nothing to merge.\n"
+                 "The transfer matrix has been left untouched.\n")
     drop = [c for c in sub.columns if c in tm.columns and c not in ("source", "target")]
     tm = tm.drop(columns=drop, errors="ignore").merge(sub, on=["source", "target"], how="left")
     tm.to_csv(tm_path, index=False)
