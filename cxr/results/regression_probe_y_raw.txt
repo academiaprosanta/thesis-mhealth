@@ -1,0 +1,55 @@
+protocol = probe    target = y_raw
+72 pairs from 9 independent domains
+
+--- UNSUPERVISED  (34 features, 2.1 rows per feature) ---
+  mean   R2=-0.144  RMSE=0.1639  rho=-0.505  tau=-0.374  [9 folds, 0 skipped]
+  ridge  R2=-0.369  RMSE=0.1793  rho=-0.026  tau=-0.018  [9 folds, 0 skipped]
+  gbm    R2=-0.920  RMSE=0.2123  rho=-0.144  tau=-0.090  [9 folds, 0 skipped]
+  permutation: null 95th pct -0.004, real -0.369, p = 0.960  NO SIGNAL
+  source selection: within-target tau -0.004, regret 0.0175 vs random 0.0221, 1/9 perfect
+  top standardised coefficients (collinear -- do not over-read):
+    pseudo_collapsed           -0.0191
+    a_distance                 -0.0178
+    delta_spec_decay           +0.0150
+    pseudo_minority_rate       +0.0127
+    tgt_kmeans_balance         -0.0102
+    pseudo_silhouette          +0.0086
+    tgt_spec_decay             -0.0069
+    tgt_kmeans_silhouette      +0.0048
+
+--- SUPERVISED  (27 features, 2.7 rows per feature) ---
+  mean   R2=-0.144  RMSE=0.1639  rho=-0.505  tau=-0.374  [9 folds, 0 skipped]
+  ridge  R2=+0.717  RMSE=0.0815  rho=+0.570  tau=+0.354  [9 folds, 0 skipped]
+  gbm    R2=+0.920  RMSE=0.0432  rho=+0.796  tau=+0.636  [9 folds, 0 skipped]
+  permutation: null 95th pct -0.001, real +0.717, p = 0.000  SIGNAL
+  source selection: within-target tau +0.099, regret 0.0219 vs random 0.0221, 2/9 perfect
+  top standardised coefficients (collinear -- do not over-read):
+    fisher_ratio_target        -0.1475
+    delta_fisher_ratio         +0.1090
+    davies_bouldin_target      -0.1089
+    calinski_harabasz_target   +0.1047
+    effective_rank_target      -0.0657
+    silhouette_target          +0.0630
+    davies_bouldin_source      -0.0516
+    delta_effective_rank       +0.0502
+
+--- COMBINED  (60 features, 1.2 rows per feature) ---
+  mean   R2=-0.144  RMSE=0.1639  rho=-0.505  tau=-0.374  [9 folds, 0 skipped]
+  ridge  R2=+0.789  RMSE=0.0704  rho=+0.644  tau=+0.443  [9 folds, 0 skipped]
+  gbm    R2=+0.944  RMSE=0.0364  rho=+0.825  tau=+0.655  [9 folds, 0 skipped]
+  permutation: null 95th pct -0.002, real +0.789, p = 0.000  SIGNAL
+  source selection: within-target tau +0.146, regret 0.0292 vs random 0.0221, 2/9 perfect
+  top standardised coefficients (collinear -- do not over-read):
+    norm_ratio                 -0.1436
+    fisher_ratio_target        -0.1066
+    davies_bouldin_target      -0.0898
+    calinski_harabasz_target   +0.0779
+    delta_fisher_ratio         +0.0694
+    delta_feat_norm_mean       -0.0623
+    tgt_feat_norm_mean         +0.0537
+    pred_frac_confident        +0.0515
+
+=== HEADLINE: ridge, by feature set ===
+  unsupervised   R2=-0.369  tau=-0.018  p=0.960
+  supervised     R2=+0.717  tau=+0.354  p=0.000
+  combined       R2=+0.789  tau=+0.443  p=0.000
